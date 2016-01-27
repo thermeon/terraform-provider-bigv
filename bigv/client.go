@@ -1,7 +1,8 @@
 package bigv
 
-type Client struct {
+type config struct {
 	account  string
+	group    string
 	user     string
 	password string
 }

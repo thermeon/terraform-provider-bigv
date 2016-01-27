@@ -20,12 +20,17 @@ func Provider() terraform.ResourceProvider {
 				DefaultFunc: schema.EnvDefaultFunc("BIGV_USER", nil),
 				Description: "The bigv user name",
 			},
-
 			"password": &schema.Schema{
 				Type:        schema.TypeString,
 				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("BGIV_PASSWORD", nil),
 				Description: "The bigv password",
+			},
+			"group": &schema.Schema{
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: schema.EnvDefaultFunc("BIGV_GROUP", nil),
+				Description: "The bigv group name",
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
@@ -35,12 +40,13 @@ func Provider() terraform.ResourceProvider {
 	}
 }
 
-func providerConfigure(d *schema.ResourceData) (client interface{}, err error) {
+func providerConfigure(d *schema.ResourceData) (bigvConfig interface{}, err error) {
 
-	client = &Client{
+	bigvConfig = &config{
 		account:  d.Get("account").(string),
 		user:     d.Get("user").(string),
 		password: d.Get("password").(string),
+		group:    d.Get("group").(string),
 	}
 
 	return

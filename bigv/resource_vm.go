@@ -1,10 +1,15 @@
 package bigv
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"math/rand"
+	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/hashicorp/terraform/helper/schema"
 )
@@ -12,9 +17,11 @@ import (
 const passwordLength = 20
 
 type bigvVm struct {
-	Name   string `json:"name"`
-	Cores  int    `json:"cores"`
-	Memory int    `json:"memory"`
+	Id       int    `json:"id,omitempty"`
+	Name     string `json:"name"`
+	Cores    int    `json:"cores"`
+	Memory   int    `json:"memory"`
+	Hostname string `json:"hostname,omitempty"`
 }
 
 type bigvDisc struct {
@@ -43,6 +50,8 @@ type bigvServer struct {
 func resourceBigvVM() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceBigvVMCreate,
+		Read:   resourceBigvVMRead,
+		//Update: resourceBigvVMUpdate,
 		Delete: resourceBigvVMDelete,
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -80,7 +89,9 @@ func resourceBigvVM() *schema.Resource {
 
 func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
-	client := meta.(*Client)
+	l := log.New(os.Stderr, "", 0)
+
+	bigvConfig := meta.(*config)
 
 	vm := bigvServer{
 		VirtualMachine: bigvVm{
@@ -97,25 +108,88 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			Distribution: d.Get("os").(string),
 			RootPassword: randomPassword(),
 		},
+		Ips: bigvNetwork{
+			Ipv4: "46.43.49.201",
+		},
 	}
 
-	j, err := json.Marshal(vm)
+	body, err := json.Marshal(vm)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "JSON: %s\n", j)
+	url := fmt.Sprintf("https://uk0.bigv.io/accounts/%s/groups/%s/vm_create", bigvConfig.account, bigvConfig.group)
+	l.Printf("Requesting create: %s", url)
 
-	_ = client
-	_ = vm
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(bigvConfig.user, bigvConfig.password)
 
-	// TODO - Id from bytemark
-	d.SetId(d.Get("name").(string))
+	vmCreated := &bigvServer{}
+	client := &http.Client{}
+
+	if resp, err := client.Do(req); err != nil {
+		return err
+	} else {
+
+		l.Printf("HTTP response Status: %s", resp.Status)
+
+		if resp.StatusCode != http.StatusAccepted {
+			return fmt.Errorf("Bad HTTP resposne status from bigv: %d", resp.StatusCode)
+		}
+
+		if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			return err
+		} else {
+			if err = json.Unmarshal(body, vmCreated); err != nil {
+				return err
+			}
+		}
+	}
+
+	d.SetId(strconv.Itoa(vmCreated.VirtualMachine.Id))
+
+	l.Printf("Created BigV VM, Id: %s", d.Id())
+
+	return nil
+}
+
+func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
+	fmt.Fprintln(os.Stderr, "Begin a update run")
+
+	return nil
+}
+
+func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
+	fmt.Fprintln(os.Stderr, "Begin a read run")
 
 	return nil
 }
 
 func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
+
+	fmt.Fprintln(os.Stderr, "Begin a delete run")
+
+	bigvConfig := meta.(*config)
+
+	url := fmt.Sprintf("https://uk0.bigv.io/accounts/%s/groups/%s/virtual_machines/%s",
+		bigvConfig.account,
+		bigvConfig.group,
+		d.Id(),
+	)
+	fmt.Fprintln(os.Stderr, "To url for delete: %s", url)
+	req, err := http.NewRequest("DELETE", url, nil)
+	req.SetBasicAuth(bigvConfig.user, bigvConfig.password)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	fmt.Fprintln(os.Stderr, "response Status:", resp.Status)
+	fmt.Fprintln(os.Stderr, "response Headers:", resp.Header)
 
 	return nil
 }
