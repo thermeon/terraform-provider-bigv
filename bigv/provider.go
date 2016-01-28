@@ -40,9 +40,9 @@ func Provider() terraform.ResourceProvider {
 	}
 }
 
-func providerConfigure(d *schema.ResourceData) (bigvConfig interface{}, err error) {
+func providerConfigure(d *schema.ResourceData) (bigvClient interface{}, err error) {
 
-	bigvConfig = &config{
+	bigvClient = &client{
 		account:  d.Get("account").(string),
 		user:     d.Get("user").(string),
 		password: d.Get("password").(string),
