@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -135,6 +136,10 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 	}
 
+	if err := vm.VirtualMachine.validateCoresToMemory(); err != nil {
+		return err
+	}
+
 	body, err := json.Marshal(vm)
 	if err != nil {
 		return err
@@ -182,12 +187,14 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 
 	vm := bigvVm{}
 
-	if d.HasChange("cores") {
+	if d.HasChange("cores") || d.HasChange("memory") {
+		// Specifiy both cores and memory together always, so we can validate them.
 		vm.Cores = d.Get("cores").(int)
+		vm.Memory = d.Get("memory").(int)
 	}
 
-	if d.HasChange("memory") {
-		vm.Memory = d.Get("memory").(int)
+	if err := vm.validateCoresToMemory(); err != nil {
+		return err
 	}
 
 	body, err := json.Marshal(vm)
@@ -370,6 +377,23 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	// Not finding the ips is fine, because they're not sent back in the create request
 	if len(vm.Network.Ips) > 0 {
 		d.Set("ip", vm.Network.Ips[0])
+	}
+
+	return nil
+}
+
+/* validateCoresToMemory
+bigv charges per 1GiB memory, and you automatically get 1 more core per 4GiB.
+That means we can't predict how much memory or cpu you should get, and we force you to be specific.
+We could just always size servers by memory, and compute the RAM, but this is more explicit
+See: http://www.bigv.io/prices
+*/
+func (v *bigvVm) validateCoresToMemory() error {
+	// 1 core per 4GiB
+	cores := int(math.Ceil(float64(v.Memory/4096) + float64(0.01)))
+
+	if cores != v.Cores {
+		return fmt.Errorf("Memory and cores mismatch!\nExpected %d cores for your %dGiB memory, but you have %d.\nSpecify 1 cores per 4GiB memory.\nSee: http://www.bigv.io/prices", cores, v.Memory/1024, v.Cores)
 	}
 
 	return nil
