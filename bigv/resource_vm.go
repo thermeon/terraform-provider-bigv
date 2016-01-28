@@ -22,23 +22,23 @@ const passwordLength = 20
 
 type bigvVm struct {
 	Id           int    `json:"id,omitempty"`
-	Name         string `json:"name"`
-	Cores        int    `json:"cores"`
-	Memory       int    `json:"memory"`
+	Name         string `json:"name,omitempty"`
+	Cores        int    `json:"cores,omitempty"`
+	Memory       int    `json:"memory,omitempty"`
 	Hostname     string `json:"hostname,omitempty"`
 	Distribution string `json:"last_imaged_with,omitempty"`
 }
 
 type bigvDisc struct {
-	Label        string `json:"label"`
-	StorageGrade string `json:"storage_grade"`
-	Size         int    `json:"size"`
+	Label        string `json:"label,omitempty"`
+	StorageGrade string `json:"storage_grade,omitempty"`
+	Size         int    `json:"size,omitempty"`
 }
 
 type bigvImage struct {
-	Distribution string `json:"distribution"`
-	RootPassword string `json:"root_password"`
-	SshPublicKey string `json:"ssh_public_key"`
+	Distribution string `json:"distribution,omitempty"`
+	RootPassword string `json:"root_password,omitempty"`
+	SshPublicKey string `json:"ssh_public_key,omitempty"`
 }
 
 type bigvNetwork struct {
@@ -47,16 +47,16 @@ type bigvNetwork struct {
 	Ipv6 string `json:"ipv6,omitempty"`
 
 	// Read Attributes
-	Label string   `json:"label"`
-	Ips   []string `json:"ips"`
-	Mac   string   `json:"mac"`
+	Label string   `json:"label,omitempty"`
+	Ips   []string `json:"ips,omitempty"`
+	Mac   string   `json:"mac,omitempty"`
 }
 
 type bigvServer struct {
 	VirtualMachine bigvVm      `json:"virtual_machine"`
-	Discs          []bigvDisc  `json:"discs"`
-	Image          bigvImage   `json:"reimage"`
-	Network        bigvNetwork `json:"ips"`
+	Discs          []bigvDisc  `json:"discs,omitempty"`
+	Image          bigvImage   `json:"reimage,omitempty"`
+	Network        bigvNetwork `json:"ips,omitempty"`
 }
 
 type bigvNic struct {
@@ -146,15 +146,12 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("VM profile: %s", body)
 
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(bigvClient.user, bigvClient.password)
 
-	client := &http.Client{}
-
-	if resp, err := client.Do(req); err != nil {
+	if resp, err := bigvClient.do(req); err != nil {
 		return err
 	} else {
 
+		defer resp.Body.Close()
 		l.Printf("HTTP response Status: %s", resp.Status)
 
 		if resp.StatusCode != http.StatusAccepted {
@@ -183,20 +180,14 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 
 	bigvClient := meta.(*client)
 
-	vm := bigvServer{}
-
-	if id, err := strconv.Atoi(d.Id()); err != nil {
-		return err
-	} else {
-		vm.VirtualMachine.Id = id
-	}
+	vm := bigvVm{}
 
 	if d.HasChange("cores") {
-		vm.VirtualMachine.Cores = d.Get("cores").(int)
+		vm.Cores = d.Get("cores").(int)
 	}
 
 	if d.HasChange("memory") {
-		vm.VirtualMachine.Memory = d.Get("memory").(int)
+		vm.Memory = d.Get("memory").(int)
 	}
 
 	body, err := json.Marshal(vm)
@@ -213,12 +204,8 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("VM profile: %s", body)
 
 	req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(bigvClient.user, bigvClient.password)
 
-	client := &http.Client{}
-
-	if resp, err := client.Do(req); err != nil {
+	if resp, err := bigvClient.do(req); err != nil {
 		return err
 	} else {
 
@@ -281,11 +268,8 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 			l.Printf("Request VM Read of %s from %s", name, url)
 
 			req, _ := http.NewRequest("GET", url, nil)
-			req.SetBasicAuth(bigvClient.user, bigvClient.password)
 
-			client := &http.Client{}
-
-			if resp, err := client.Do(req); err != nil {
+			if resp, err := bigvClient.do(req); err != nil {
 				j.err = err
 			} else {
 
@@ -338,14 +322,16 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 		d.Id(),
 	)
 	req, _ := http.NewRequest("DELETE", url, nil)
-	req.SetBasicAuth(bigvClient.user, bigvClient.password)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
+	if resp, err := bigvClient.do(req); err != nil {
 		return err
+	} else {
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("Delete VM %s Bad HTTP status from bigv: %d", d.Id(), resp.StatusCode)
+		}
 	}
-	defer resp.Body.Close()
 
 	return nil
 }
