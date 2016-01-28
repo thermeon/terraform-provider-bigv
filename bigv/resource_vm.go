@@ -414,7 +414,4 @@ func randomPassword() string {
 /* TODO:
  * Check distribution
  * Disc isn't flexible at all
- * Allocate ip automatically
- * Set id properly
- * Delete error handling
  */
