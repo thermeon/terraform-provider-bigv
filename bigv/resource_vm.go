@@ -328,7 +328,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 	} else {
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusNoContent {
 			return fmt.Errorf("Delete VM %s Bad HTTP status from bigv: %d", d.Id(), resp.StatusCode)
 		}
 	}
