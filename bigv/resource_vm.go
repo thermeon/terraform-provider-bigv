@@ -145,16 +145,13 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/vm_create", bigvClient.uri())
+	// VM create uses a bigger path
+	url := fmt.Sprintf("%s/vm_create", bigvClient.fullUri())
 
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
-	if err != nil {
-		l.Printf("Error creating http request!")
-		return err
-	}
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
@@ -210,7 +207,7 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	url := fmt.Sprintf("%s/virtual_machines/%s",
-		bigvClient.uri(),
+		bigvClient.fullUri(),
 		d.Id(),
 	)
 
@@ -277,7 +274,7 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 			defer wg.Done()
 
 			url := fmt.Sprintf("%s/virtual_machines/%s%s",
-				bigvClient.uri(),
+				bigvClient.fullUri(),
 				d.Id(),
 				j.uri,
 			)
@@ -338,7 +335,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 	bigvClient := meta.(*client)
 
 	url := fmt.Sprintf("%s/virtual_machines/%s?purge=true",
-		bigvClient.uri(),
+		bigvClient.fullUri(),
 		d.Id(),
 	)
 	req, _ := http.NewRequest("DELETE", url, nil)
