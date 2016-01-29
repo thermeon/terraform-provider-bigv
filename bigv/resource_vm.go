@@ -75,7 +75,12 @@ func resourceBigvVM() *schema.Resource {
 				Required: true,
 				ForceNew: true,
 			},
-			"ip": &schema.Schema{
+			"ipv4": &schema.Schema{
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"ipv6": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
@@ -132,7 +137,8 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			RootPassword: randomPassword(),
 		},
 		Network: bigvNetwork{
-			Ipv4: d.Get("ip").(string),
+			Ipv4: d.Get("ipv4").(string),
+			Ipv6: d.Get("ipv6").(string),
 		},
 	}
 
@@ -387,7 +393,8 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 
 	// Not finding the ips is fine, because they're not sent back in the create request
 	if len(vm.Network.Ips) > 0 {
-		d.Set("ip", vm.Network.Ips[0])
+		d.Set("ipv4", vm.Network.Ips[0])
+		d.Set("ipv6", vm.Network.Ips[1])
 	}
 
 	return nil
