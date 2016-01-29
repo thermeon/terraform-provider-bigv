@@ -9,10 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
 const bigvURI = "https://uk0.bigv.io"
+const bigvAuthURI = "https://auth.bytemark.co.uk/session"
 const bigvTimeout = 20
 
 type client struct {
@@ -24,9 +26,11 @@ type client struct {
 	session  string
 }
 
+var sessions sync.Mutex
+
 type credentials struct {
-	username string
-	password string
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 func (c *client) fullUri() string {
@@ -38,18 +42,21 @@ func (c *client) fullUri() string {
 }
 
 func (c *client) newSession() error {
+	l := log.New(os.Stderr, "", 0)
+
 	cr := credentials{
-		username: c.user,
-		password: c.password,
+		Username: c.user,
+		Password: c.password,
 	}
 
 	body, err := json.Marshal(cr)
 	if err != nil {
+		l.Printf("Error creating json: %s", err)
 		return err
 	}
 
-	url := fmt.Sprintf("%s/session", bigvURI)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	l.Printf("Requesting new session at: %s", bigvAuthURI)
+	req, _ := http.NewRequest("POST", bigvAuthURI, bytes.NewBuffer(body))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "text/plain")
 
@@ -61,6 +68,7 @@ func (c *client) newSession() error {
 		defer resp.Body.Close()
 
 		c.session = string(body)
+		l.Printf("Got back session Id: %s", c.session)
 	}
 
 	return nil
@@ -74,14 +82,22 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 		c.http = &http.Client{
 			Timeout: time.Second * bigvTimeout,
 		}
+	}
 
-		if err := c.newSession(); err != nil {
-			return nil, err
+	if c.session == "" {
+		sessions.Lock()
+		// Check again, in case it's been fixed by something we were blocking on
+		if c.session == "" {
+			if err := c.newSession(); err != nil {
+				return nil, err
+			}
 		}
+		sessions.Unlock()
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.password)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.session))
+	l.Printf("Using Session Id: %s", c.session)
 
 	// We're going to potentially do this again, so we need to copy the body
 	var body []byte
