@@ -399,7 +399,7 @@ func (v *bigvVm) validateCoresToMemory() error {
 	return nil
 }
 
-const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+,.?/:;{}[]`~"
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@%&-_=+:~"
 
 func randomPassword() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))

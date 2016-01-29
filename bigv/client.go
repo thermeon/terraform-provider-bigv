@@ -32,7 +32,9 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.SetBasicAuth(c.user, c.password)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: time.Second * 20,
+	}
 
 	for i := 0; i < 3; i++ {
 		if resp, err := client.Do(req); err != nil {
