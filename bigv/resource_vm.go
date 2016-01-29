@@ -150,17 +150,24 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
 
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		l.Printf("Error creating http request!")
+		return err
+	}
 
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
 	} else {
 
+		// Always close the body when done
 		defer resp.Body.Close()
+
 		l.Printf("HTTP response Status: %s", resp.Status)
 
 		if resp.StatusCode != http.StatusAccepted {
-			return fmt.Errorf("Create VM bad status from bigv: %d", resp.StatusCode)
+			body, _ := ioutil.ReadAll(resp.Body)
+			return fmt.Errorf("Create VM status %d from bigv: %s", resp.StatusCode, body)
 		}
 
 		if body, err := ioutil.ReadAll(resp.Body); err != nil {
@@ -215,6 +222,9 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
 	} else {
+
+		// Always close the body when done
+		defer resp.Body.Close()
 
 		l.Printf("HTTP response Status: %s", resp.Status)
 
@@ -280,6 +290,9 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 				j.err = err
 			} else {
 
+				// Always close the body when done
+				defer resp.Body.Close()
+
 				l.Printf("HTTP response Status: %s", resp.Status)
 
 				if resp.StatusCode != http.StatusOK {
@@ -333,6 +346,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
 	} else {
+		// Always close the body when done
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusNoContent {
