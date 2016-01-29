@@ -3,7 +3,6 @@ package bigv
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,14 +11,13 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
 const passwordLength = 20
+const waitForVM = 120
 
 type bigvVm struct {
 	Id           int    `json:"id,omitempty"`
@@ -42,11 +40,13 @@ type bigvImage struct {
 	SshPublicKey string `json:"ssh_public_key,omitempty"`
 }
 
-type bigvNetwork struct {
+type bigvIps struct {
 	// Create attributes
 	Ipv4 string `json:"ipv4,omitempty"`
 	Ipv6 string `json:"ipv6,omitempty"`
+}
 
+type bigvNic struct {
 	// Read Attributes
 	Label string   `json:"label,omitempty"`
 	Ips   []string `json:"ips,omitempty"`
@@ -54,13 +54,16 @@ type bigvNetwork struct {
 }
 
 type bigvServer struct {
-	VirtualMachine bigvVm      `json:"virtual_machine"`
-	Discs          []bigvDisc  `json:"discs,omitempty"`
-	Image          bigvImage   `json:"reimage,omitempty"`
-	Network        bigvNetwork `json:"ips,omitempty"`
+	bigvVm
+	Discs []bigvDisc `json:"discs,omitempty"`
+	Nics  []bigvNic  `json:"network_interface,omitempty"`
 }
 
-type bigvNic struct {
+type bigvVMCreate struct {
+	VirtualMachine bigvVm     `json:"virtual_machine"`
+	Discs          []bigvDisc `json:"discs,omitempty"`
+	Image          bigvImage  `json:"reimage,omitempty"`
+	Ips            bigvIps    `json:"ips,omitempty"` // Just used for create
 }
 
 func resourceBigvVM() *schema.Resource {
@@ -121,7 +124,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 	bigvClient := meta.(*client)
 
-	vm := bigvServer{
+	vm := bigvVMCreate{
 		VirtualMachine: bigvVm{
 			Name:   d.Get("name").(string),
 			Cores:  d.Get("cores").(int),
@@ -136,7 +139,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			Distribution: d.Get("os").(string),
 			RootPassword: randomPassword(),
 		},
-		Network: bigvNetwork{
+		Ips: bigvIps{
 			Ipv4: d.Get("ipv4").(string),
 			Ipv6: d.Get("ipv6").(string),
 		},
@@ -173,14 +176,12 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			return fmt.Errorf("Create VM status %d from bigv: %s", resp.StatusCode, body)
 		}
 
-		if body, err := ioutil.ReadAll(resp.Body); err != nil {
+		for k, v := range resp.Header {
+			l.Printf("%s: %s", k, v)
+		}
+
+		if err := waitForMachine(d, bigvClient); err != nil {
 			return err
-		} else {
-			// The first read we do just parses what they've immediately told us
-			// That excludes the ip address only
-			if err := resourceFromJson(d, body); err != nil {
-				return err
-			}
 		}
 
 		l.Printf("Created BigV VM, Id: %s", d.Id())
@@ -188,6 +189,52 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		return nil
 	}
 
+}
+
+func waitForMachine(d *schema.ResourceData, bigvClient *client) error {
+	l := log.New(os.Stderr, "", 0)
+
+	url := fmt.Sprintf("%s/virtual_machines/%s?view=overview",
+		bigvUri,
+		d.Get("name"),
+	)
+
+	l.Printf("VM Health Check: %s", url)
+	req, _ := http.NewRequest("GET", url, nil)
+
+	for i := 0; i < waitForVM; i++ {
+		resp, err := bigvClient.do(req)
+		if err != nil {
+			return fmt.Errorf("Error checking on VM health: %s", err)
+		}
+
+		// Always close the body when done
+		defer resp.Body.Close()
+
+		body, _ := ioutil.ReadAll(resp.Body)
+
+		l.Printf("HTTP response Status: %s", resp.Status)
+		l.Printf("HTTP response Body: %s", body)
+
+		if i == 0 {
+			// Use the first response to populate the body of our resource, in case we never do any better
+			resourceFromJson(d, body)
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			// The VM is up
+			l.Println("VM is Up and OK")
+			return resourceFromJson(d, body)
+		}
+
+		if resp.StatusCode != http.StatusAccepted {
+			return fmt.Errorf("VM healthcheck Bad HTTP status from bigv: %d", resp.StatusCode)
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
+	return fmt.Errorf("VM healthcheck didn't return in %d seconds", waitForVM)
 }
 
 func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
@@ -238,12 +285,7 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			return err
 		} else {
-			// This time we only get back the virtual_machine section
-			jsonStr := []byte(fmt.Sprintf(`{"virtual_machine": %s}`,
-				body,
-			))
-
-			if err := resourceFromJson(d, jsonStr); err != nil {
+			if err := resourceFromJson(d, body); err != nil {
 				return err
 			}
 		}
@@ -260,80 +302,35 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 
 	bigvClient := meta.(*client)
 
-	var wg sync.WaitGroup
+	url := fmt.Sprintf("%s/virtual_machines/%s?view=overview",
+		bigvUri,
+		d.Get("name"),
+	)
 
-	type jobSpec struct {
-		uri  string
-		resp []byte
-		err  error
+	l.Printf("VM Read: %s", url)
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	resp, err := bigvClient.do(req)
+	if err != nil {
+		return err
 	}
 
-	tasks := map[string]*jobSpec{
-		"machine": {uri: ""},
-		"discs":   {uri: "/discs"},
-		"ips":     {uri: "/nics"},
+	// Always close the body when done
+	defer resp.Body.Close()
+
+	l.Printf("HTTP response Status: %s", resp.Status)
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Read VM Bad HTTP status from bigv: %d", resp.StatusCode)
 	}
 
-	for name, task := range tasks {
-		wg.Add(1)
-		go func(j *jobSpec) {
-			defer wg.Done()
-
-			url := fmt.Sprintf("%s/virtual_machines/%s%s",
-				bigvClient.fullUri(),
-				d.Id(),
-				j.uri,
-			)
-
-			l.Printf("Request VM Read of %s from %s", name, url)
-
-			req, _ := http.NewRequest("GET", url, nil)
-
-			if resp, err := bigvClient.do(req); err != nil {
-				j.err = err
-			} else {
-
-				// Always close the body when done
-				defer resp.Body.Close()
-
-				l.Printf("HTTP response Status: %s", resp.Status)
-
-				if resp.StatusCode != http.StatusOK {
-					j.err = fmt.Errorf("Read VM %s Bad HTTP status from bigv: %d", name, resp.StatusCode)
-				}
-
-				if body, err := ioutil.ReadAll(resp.Body); err != nil {
-					j.err = err
-				} else {
-					j.resp = bytes.TrimSpace(body)
-				}
-			}
-		}(task)
+	body, ioErr := ioutil.ReadAll(resp.Body)
+	if ioErr != nil {
+		return ioErr
 	}
 
-	wg.Wait()
-
-	// Collect errors
-	{
-		var errs []string
-		for _, task := range tasks {
-			if task.err != nil {
-				errs = append(errs, task.err.Error())
-			}
-		}
-		if len(errs) > 0 {
-			return errors.New(strings.Join(errs, "\n"))
-		}
-	}
-
-	jsonStr := []byte(fmt.Sprintf(`{"virtual_machine": %s, "discs": %s, "ips": %s}`,
-		tasks["machine"].resp,
-		tasks["discs"].resp,
-		// Remove the array of ips. God help us if we get mulitple nics. TODO, I guess.
-		bytes.TrimRight(bytes.TrimLeft(tasks["ips"].resp, "["), "]"),
-	))
-
-	return resourceFromJson(d, jsonStr)
+	return resourceFromJson(d, body)
 }
 
 func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
@@ -371,30 +368,26 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 		return err
 	}
 
-	d.SetId(strconv.Itoa(vm.VirtualMachine.Id))
-	d.Set("name", vm.VirtualMachine.Name)
-	d.Set("cores", vm.VirtualMachine.Cores)
-	d.Set("memory", vm.VirtualMachine.Memory)
+	d.SetId(strconv.Itoa(vm.Id))
+	d.Set("name", vm.Name)
+	d.Set("cores", vm.Cores)
+	d.Set("memory", vm.Memory)
 
 	// If we don't get discs back, this was probably an update request
 	if len(vm.Discs) == 1 {
 		d.Set("disk_size", vm.Discs[0].Size)
 	}
 
-	// Root password is never sent back to us
-	if vm.Image.RootPassword != "" {
-		d.Set("root_password", vm.Image.RootPassword)
-	}
-
 	// Distribution is empty in create response, leave it with what we sent in
-	if vm.VirtualMachine.Distribution != "" {
-		d.Set("os", vm.VirtualMachine.Distribution)
+	if vm.Distribution != "" {
+		d.Set("os", vm.Distribution)
 	}
 
 	// Not finding the ips is fine, because they're not sent back in the create request
-	if len(vm.Network.Ips) > 0 {
-		d.Set("ipv4", vm.Network.Ips[0])
-		d.Set("ipv6", vm.Network.Ips[1])
+	if len(vm.Nics) > 0 {
+		// This is fairly^Wvery^Wacceptably hacky
+		d.Set("ipv4", vm.Nics[0].Ips[0])
+		d.Set("ipv6", vm.Nics[1].Ips[1])
 	}
 
 	return nil

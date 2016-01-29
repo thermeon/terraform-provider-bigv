@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-const bigvURI = "https://uk0.bigv.io"
-const bigvAuthURI = "https://auth.bytemark.co.uk/session"
+const bigvUri = "https://uk0.bigv.io"
+const bigvAuthUri = "https://auth.bytemark.co.uk/session"
 const bigvTimeout = 20
 
 type client struct {
@@ -35,7 +35,7 @@ type credentials struct {
 
 func (c *client) fullUri() string {
 	return fmt.Sprintf("%s/accounts/%s/groups/%s",
-		bigvURI,
+		bigvUri,
 		c.account,
 		c.group,
 	)
@@ -55,8 +55,8 @@ func (c *client) newSession() error {
 		return err
 	}
 
-	l.Printf("Requesting new session at: %s", bigvAuthURI)
-	req, _ := http.NewRequest("POST", bigvAuthURI, bytes.NewBuffer(body))
+	l.Printf("Requesting new session at: %s", bigvAuthUri)
+	req, _ := http.NewRequest("POST", bigvAuthUri, bytes.NewBuffer(body))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "text/plain")
 
