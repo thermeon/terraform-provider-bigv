@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -26,6 +27,8 @@ type bigvVm struct {
 	Memory       int    `json:"memory,omitempty"`
 	Hostname     string `json:"hostname,omitempty"`
 	Distribution string `json:"last_imaged_with,omitempty"`
+	Power        bool   `json:"power_on"`
+	Reboot       bool   `json:"autoreboot_on"`
 }
 
 type bigvDisc struct {
@@ -114,13 +117,31 @@ func resourceBigvVM() *schema.Resource {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
+			"power_on": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
+			"reboot": &schema.Schema{
+				Type:     schema.TypeBool,
+				Computed: true,
+			},
 		},
 	}
 }
 
+var createPipeline sync.Mutex
+
 func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 	l := log.New(os.Stderr, "", 0)
+
+	// TODO - Early 2016, and we hope to remove this soonish
+	// bigV deadlocks if you hit it with concurrent creates.
+	// That might be an ip allocation issue, and specifying both ips might
+	// fix it, but that's untested. For now waiting for them to confirm we
+	// can lift this restriction.
+	createPipeline.Lock()
+	defer createPipeline.Unlock()
 
 	bigvClient := meta.(*client)
 
@@ -248,6 +269,14 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		// Specifiy both cores and memory together always, so we can validate them.
 		vm.Cores = d.Get("cores").(int)
 		vm.Memory = d.Get("memory").(int)
+
+		// Whenever we change either of these reboot the server
+		// That's because even though decreasing ram doesn't require a reboot,
+		// it looks like it often goes wrong and you get less ram than you should.
+		// e.g. lowering to 1GB nearly always gives you 750MB
+		vm.Power = false
+		// Always need Reboot on, otherwise it'll stay down
+		vm.Reboot = true
 	}
 
 	if err := vm.validateCoresToMemory(); err != nil {
@@ -372,6 +401,8 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	d.Set("name", vm.Name)
 	d.Set("cores", vm.Cores)
 	d.Set("memory", vm.Memory)
+	d.Set("power_on", vm.Power)
+	d.Set("reboot", vm.Reboot)
 
 	// If we don't get discs back, this was probably an update request
 	if len(vm.Discs) == 1 {
