@@ -75,6 +75,7 @@ func resourceBigvVM() *schema.Resource {
 		Read:   resourceBigvVMRead,
 		Update: resourceBigvVMUpdate,
 		Delete: resourceBigvVMDelete,
+		Exists: resourceBigvVMExists,
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
 				Type:     schema.TypeString,
@@ -384,6 +385,29 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	return nil
+}
+
+func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error) {
+	bigvClient := meta.(*client)
+
+	url := fmt.Sprintf("%s/virtual_machines/%s?view=simple",
+		bigvClient.fullUri(),
+		d.Id(),
+	)
+
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := bigvClient.do(req)
+	if err != nil {
+		return false, err
+	}
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
+		return true, nil
+	} else if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("Unexpected HTTP status from VM exists check: %d", resp.StatusCode)
 }
 
 func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
