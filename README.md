@@ -8,7 +8,7 @@ See [BigV prices](http://www.bigv.io/prices), [Resource definitions](http://www.
 [API documentation](http://www.bigv.io/support/api/virtual_machines/) for configuration options to resource parameters.
 
 
-## Changes and reboots
+## Resource changes and reboots
 
 If you change cores or memory, the VM *will* be restarted.
 It's always necessary for increases. Strictly bigv can downsize without restarts,
@@ -47,15 +47,21 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 
    We force you to state the cores instead of computing them for you to avoid suprises.
 
+   Defaults to 1.
+
 * **memory**
 
    How much RAM to allocate in MiB. Note that this affects cores; See above.
+
+   Defaults to 1024.
 
 * **os**
 
    Short name of operating system to image.
    See: [Resource definitions](http://www.bigv.io/support/api/definitions/)
    Common options are: jessie, vivid and none
+
+   Defaults to none.
 
 * **ipv4**
 * **ipv6**
@@ -67,6 +73,23 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 * **disc_size**
 
    Disc size in MiB. More options in the API are not yet supported, such as storage grade.
+
+   Defaults to 25600
+
+* **power_on**
+
+   Whether or not the machine should be powered.
+   Note that if *reboot* is true then setting *power_on* to false just reboots the VM immediately.
+   See [Bigv power documentation](http://www.bigv.io/support/api/virtual_machines/#Power)
+   
+   Defaults to true.
+
+* **reboot**
+
+   Whether or not the machine should be rebooted automatically when powered down.
+   See [Bigv power documentation](http://www.bigv.io/support/api/virtual_machines/#Power)
+   
+   Defaults to true.
 
 ## Computed values
 

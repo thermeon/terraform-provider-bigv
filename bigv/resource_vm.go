@@ -119,12 +119,14 @@ func resourceBigvVM() *schema.Resource {
 				Computed: true,
 			},
 			"power_on": &schema.Schema{
-				Type:     schema.TypeBool,
-				Computed: true,
+				Type:        schema.TypeBool,
+				Default:     true,
+				Description: "Whether or not the VM should be powered. Note that with reboot true, power_on false is just a reboot",
 			},
 			"reboot": &schema.Schema{
-				Type:     schema.TypeBool,
-				Computed: true,
+				Type:        schema.TypeBool,
+				Default:     true,
+				Description: "Whether or not to reboot the VM when the power_on is turned off",
 			},
 		},
 	}
