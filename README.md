@@ -7,6 +7,14 @@ This terraform provider allows the management of machines on that platform.
 See [BigV prices](http://www.bigv.io/prices), [Resource definitions](http://www.bigv.io/support/api/definitions/) and 
 [API documentation](http://www.bigv.io/support/api/virtual_machines/) for configuration options to resource parameters.
 
+
+## Changes and reboots
+
+If you change cores or memory, the VM *will* be restarted.
+It's always necessary for increases. Strictly bigv can downsize without restarts,
+but we've noticed that decreasing RAM nearly always ends up inconsistent in the VM.
+e.g. decreasing to 1GiB gives you 750MiB until you restart.
+
 ## Provider parameters
 
 * **account**
