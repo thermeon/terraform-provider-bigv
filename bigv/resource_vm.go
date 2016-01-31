@@ -3,6 +3,7 @@ package bigv
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -151,6 +152,11 @@ func resourceBigvVM() *schema.Resource {
 				Optional:    true,
 				Description: "Whether or not to reboot the VM when the power_on is turned off",
 			},
+			"ssh_public_key": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "One or more ssh public keys to put on the machine. Will only work if os is not core",
+			},
 		},
 	}
 }
@@ -189,11 +195,16 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		Image: bigvImage{
 			Distribution: d.Get("os").(string),
 			RootPassword: randomPassword(),
+			SshPublicKey: d.Get("ssh_public_key").(string),
 		},
 		Ips: bigvIps{
 			Ipv4: d.Get("ipv4").(string),
 			Ipv6: d.Get("ipv6").(string),
 		},
+	}
+
+	if vm.Image.SshPublicKey != "" && vm.Image.Distribution == "none" {
+		return errors.New("Cannot deploy ssh public keys with an os of 'none'. Please use a provisioner instead")
 	}
 
 	if err := vm.VirtualMachine.validateCoresToMemory(); err != nil {

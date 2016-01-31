@@ -100,6 +100,10 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
    
    Defaults to true.
 
+* **ssh_public_key**
+
+   SSH public key to be created on the VM. Can be multiple keys.
+
 ## Computed values
 
 * **root_password**
