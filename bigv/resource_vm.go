@@ -540,8 +540,3 @@ func randomPassword() string {
 	}
 	return string(b)
 }
-
-/* TODO:
- * Check distribution
- * Disc isn't flexible at all
- */
