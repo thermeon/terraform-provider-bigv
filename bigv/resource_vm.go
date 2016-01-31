@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
@@ -163,19 +162,9 @@ func resourceBigvVM() *schema.Resource {
 	}
 }
 
-var createPipeline sync.Mutex
-
 func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 	l := log.New(os.Stderr, "", 0)
-
-	// TODO - Early 2016, and we hope to remove this soonish
-	// bigV deadlocks if you hit it with concurrent creates.
-	// That might be an ip allocation issue, and specifying both ips might
-	// fix it, but that's untested. For now waiting for them to confirm we
-	// can lift this restriction.
-	createPipeline.Lock()
-	defer createPipeline.Unlock()
 
 	bigvClient := meta.(*client)
 

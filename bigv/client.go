@@ -15,7 +15,7 @@ import (
 
 const bigvUri = "https://uk0.bigv.io"
 const bigvAuthUri = "https://auth.bytemark.co.uk/session"
-const bigvTimeout = 20
+const bigvTimeout = 120
 
 type client struct {
 	account  string
