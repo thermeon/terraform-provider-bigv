@@ -54,13 +54,16 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
    How many cores to allocate. Note that cores must be allocated 1 per 4GiB of RAM.
    So 1-3GiB = 1 core, 4-7GiB = 2 core.
 
-   We force you to state the cores instead of computing them for you to avoid suprises.
+   If you don't specify cores, but do specify memory, you'll be assigned the correct cores for the memory.
 
    Defaults to 1.
 
 * **memory**
 
-   How much RAM to allocate in MiB. Note that this affects cores; See above.
+   How much RAM to allocate in MiB.
+
+   If you don't specify mmeory byt do specify cores, you'll be allocated the minimal memory for the core count.
+   e.g. 1GiB for 1 core, 4GiB for 2 cores, etc.
 
    Defaults to 1024.
 
@@ -99,6 +102,10 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
    See [Bigv power documentation](http://www.bigv.io/support/api/virtual_machines/#Power)
    
    Defaults to true.
+
+* **ssh_public_key**
+
+   SSH public key to be created on the VM. Can be multiple keys.
 
 ## Computed values
 

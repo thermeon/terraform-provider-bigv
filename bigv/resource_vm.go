@@ -3,6 +3,7 @@ package bigv
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -87,7 +88,7 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"group": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Default:     "default",
 				Description: "bigv group name for the VM. Defaults to default",
@@ -98,7 +99,7 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"zone": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Default:     "york",
 				Description: "bigv zone to put the VM in. Defaults to york",
@@ -120,14 +121,16 @@ func resourceBigvVM() *schema.Resource {
 				ForceNew: true,
 			},
 			"cores": &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  "1",
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				ComputedWhen: []string{"memory"},
 			},
 			"memory": &schema.Schema{
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  "1024",
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Computed:     true,
+				ComputedWhen: []string{"cores"},
 			},
 			"disc_size": &schema.Schema{
 				Type:     schema.TypeInt,
@@ -150,6 +153,11 @@ func resourceBigvVM() *schema.Resource {
 				Default:     true,
 				Optional:    true,
 				Description: "Whether or not to reboot the VM when the power_on is turned off",
+			},
+			"ssh_public_key": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "One or more ssh public keys to put on the machine. Will only work if os is not core",
 			},
 		},
 	}
@@ -189,6 +197,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		Image: bigvImage{
 			Distribution: d.Get("os").(string),
 			RootPassword: randomPassword(),
+			SshPublicKey: d.Get("ssh_public_key").(string),
 		},
 		Ips: bigvIps{
 			Ipv4: d.Get("ipv4").(string),
@@ -196,8 +205,12 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 	}
 
-	if err := vm.VirtualMachine.validateCoresToMemory(); err != nil {
+	if err := vm.VirtualMachine.computeCoresToMemory(); err != nil {
 		return err
+	}
+
+	if vm.Image.SshPublicKey != "" && vm.Image.Distribution == "none" {
+		return errors.New("Cannot deploy ssh public keys with an os of 'none'. Please use a provisioner instead")
 	}
 
 	body, err := json.Marshal(vm)
@@ -323,7 +336,7 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		}
 	}
 
-	if err := vm.validateCoresToMemory(); err != nil {
+	if err := vm.computeCoresToMemory(); err != nil {
 		return err
 	}
 
@@ -512,18 +525,29 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	return nil
 }
 
-/* validateCoresToMemory
+/* computeCoresToMemory
 bigv charges per 1GiB memory, and you automatically get 1 more core per 4GiB.
-That means we can't predict how much memory or cpu you should get, and we force you to be specific.
-We could just always size servers by memory, and compute the RAM, but this is more explicit
 See: http://www.bigv.io/prices
 */
-func (v *bigvVm) validateCoresToMemory() error {
-	// 1 core per 4GiB
-	cores := int(math.Ceil(float64(v.Memory/4096) + float64(0.01)))
+func (v *bigvVm) computeCoresToMemory() error {
 
-	if cores != v.Cores {
-		return fmt.Errorf("Memory and cores mismatch!\nExpected %d cores for your %dGiB memory, but you have %d.\nSpecify 1 cores per 4GiB memory.\nSee: http://www.bigv.io/prices", cores, v.Memory/1024, v.Cores)
+	switch {
+	case v.Cores == 0 && v.Memory == 0:
+		// Both unset, so just supply defaults
+		v.Cores = 1
+		v.Memory = 1024
+	case v.Cores == 0:
+		// Just the cores calculated
+		v.Cores = int(math.Ceil(float64(v.Memory/4096) + float64(0.01)))
+	case v.Memory == 0:
+		// Just the memory calculated
+		v.Memory = int(math.Max(1024, float64((v.Cores-1)*4096)))
+	default:
+		// Both set, so validate them
+		expectedCores := int(math.Ceil(float64(v.Memory/4096) + float64(0.01)))
+		if expectedCores != v.Cores {
+			return fmt.Errorf("Memory and cores mismatch!\nExpected %d cores for your %dGiB memory, but you have %d.\nSpecify 1 cores per 4GiB memory.\nSee: http://www.bigv.io/prices", expectedCores, v.Memory/1024, v.Cores)
+		}
 	}
 
 	return nil
@@ -540,8 +564,3 @@ func randomPassword() string {
 	}
 	return string(b)
 }
-
-/* TODO:
- * Check distribution
- * Disc isn't flexible at all
- */
