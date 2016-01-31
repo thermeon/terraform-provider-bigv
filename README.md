@@ -21,13 +21,22 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 
    Bigv account name.
 
+* **group**
+
+   Default bigv group to for the VM if the resource doesn't specify
+
+   Defaults to default.
+
+* **zone**
+
+   Default bigv zone to put the server in if the resource doesn't specify. 
+   Currently this is machester or york. See [definitions](http://www.bigv.io/support/api/definitions/).
+
+   Defaults to york.
+
 * **user**
 
    Bigv Username
-
-* **group**
-
-   The group to use. Often this is just "default".
 
 * **password**
 
@@ -39,6 +48,18 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 * **name**
 
    The VM name
+
+* **group**
+
+   The group name for the server.
+
+   Defaults to provider.group.
+
+* **zone**
+
+   The zone to put the server in. Currently this is machester or york. See [definitions](http://www.bigv.io/support/api/definitions/).
+
+   Defaults to provider.zone
 
 * **cores**
 
@@ -107,8 +128,11 @@ variable "account" {
 variable "user" {
   default = "myuser"
 }
- variable "group" {
+variable "group" {
   default = "default"
+}
+variable "zone" {
+  default = "york"
 }
 // Probably best to supply this interactively
 variable "password" { }
@@ -121,6 +145,7 @@ provider "bigv" {
   user     = "${var.user}"
   password = "${var.password}"
   group    = "${var.group}"
+  zone     = "${var.zone}"
 }
 ```
 

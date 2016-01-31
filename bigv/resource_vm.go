@@ -3,6 +3,7 @@ package bigv
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -29,6 +30,9 @@ type bigvVm struct {
 	Distribution string `json:"last_imaged_with,omitempty"`
 	Power        bool   `json:"power_on"`
 	Reboot       bool   `json:"autoreboot_on"`
+	Group        string `json:"group,omitempty"`
+	GroupId      int    `json:"group_id,omitempty"`
+	Zone         string `json:"zone_name,omitempty"`
 }
 
 type bigvDisc struct {
@@ -82,6 +86,22 @@ func resourceBigvVM() *schema.Resource {
 				Required: true,
 				ForceNew: true,
 			},
+			"group": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				ForceNew:    true,
+				Description: "bigv group name for the VM. Defaults to the provider.group",
+			},
+			"group_id": &schema.Schema{
+				Type:     schema.TypeInt,
+				Computed: true,
+			},
+			"zone": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				ForceNew:    true,
+				Description: "bigv zone to put the VM in. Defaults to the provider.zone",
+			},
 			"ipv4": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
@@ -121,11 +141,13 @@ func resourceBigvVM() *schema.Resource {
 			"power_on": &schema.Schema{
 				Type:        schema.TypeBool,
 				Default:     true,
+				Optional:    true,
 				Description: "Whether or not the VM should be powered. Note that with reboot true, power_on false is just a reboot",
 			},
 			"reboot": &schema.Schema{
 				Type:        schema.TypeBool,
 				Default:     true,
+				Optional:    true,
 				Description: "Whether or not to reboot the VM when the power_on is turned off",
 			},
 		},
@@ -153,6 +175,10 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			Name:   d.Get("name").(string),
 			Cores:  d.Get("cores").(int),
 			Memory: d.Get("memory").(int),
+			Power:  d.Get("power_on").(bool),
+			Reboot: d.Get("reboot").(bool),
+			Group:  d.Get("group").(string),
+			Zone:   d.Get("zone").(string),
 		},
 		Discs: []bigvDisc{{
 			Label:        "root",
@@ -169,6 +195,21 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 	}
 
+	if vm.VirtualMachine.Group == "" {
+		if bigvClient.group == "" {
+			return errors.New("group must be specified on the resource or the provider")
+		} else {
+			vm.VirtualMachine.Group = bigvClient.group
+		}
+	}
+
+	if vm.VirtualMachine.Zone == "" {
+		if bigvClient.zone == "" {
+			return errors.New("zone must be specified on the resource or the provider")
+		} else {
+			vm.VirtualMachine.Zone = bigvClient.zone
+		}
+	}
 	if err := vm.VirtualMachine.validateCoresToMemory(); err != nil {
 		return err
 	}
@@ -179,7 +220,11 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	// VM create uses a bigger path
-	url := fmt.Sprintf("%s/vm_create", bigvClient.fullUri())
+	url := fmt.Sprintf("%s/accounts/%s/groups/%s/vm_create",
+		bigvUri,
+		bigvClient.account,
+		vm.VirtualMachine.Group, // this will be group name
+	)
 
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
@@ -268,6 +313,14 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 
 	vm := bigvVm{}
 
+	if d.HasChange("power_on") {
+		vm.Power = d.Get("power_on").(bool)
+	}
+
+	if d.HasChange("power_on") {
+		vm.Reboot = d.Get("reboot").(bool)
+	}
+
 	if d.HasChange("cores") || d.HasChange("memory") {
 		// Specifiy both cores and memory together always, so we can validate them.
 		vm.Cores = d.Get("cores").(int)
@@ -277,9 +330,11 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		// That's because even though decreasing ram doesn't require a reboot,
 		// it looks like it often goes wrong and you get less ram than you should.
 		// e.g. lowering to 1GB nearly always gives you 750MB
-		vm.Power = false
-		// Always need Reboot on, otherwise it'll stay down
-		vm.Reboot = true
+		if !d.HasChange("power_on") {
+			vm.Power = false
+			// Always need Reboot on, otherwise it'll stay down
+			vm.Reboot = true
+		}
 	}
 
 	if err := vm.validateCoresToMemory(); err != nil {
@@ -291,15 +346,21 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/virtual_machines/%s",
-		bigvClient.fullUri(),
+	url := fmt.Sprintf("%s/accounts/%s/groups/%s/virtual_machines/%s",
+		bigvUri,
+		bigvClient.account,
+		d.Get("group"),
 		d.Id(),
 	)
 
 	l.Printf("Requesting VM update: %s", url)
 	l.Printf("VM profile: %s", body)
 
-	req, _ := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+	if err != nil {
+		l.Printf("Error creating request for Update: %s", err)
+		return err
+	}
 
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
@@ -366,14 +427,21 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
+	l := log.New(os.Stderr, "", 0)
 
 	bigvClient := meta.(*client)
 
-	url := fmt.Sprintf("%s/virtual_machines/%s?purge=true",
-		bigvClient.fullUri(),
+	url := fmt.Sprintf("%s/accounts/%s/groups/%s/virtual_machines/%s?purge=true",
+		bigvUri,
+		bigvClient.account,
+		d.Get("group"),
 		d.Id(),
 	)
-	req, _ := http.NewRequest("DELETE", url, nil)
+	l.Printf("Deleting VM at %s", url)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
 
 	if resp, err := bigvClient.do(req); err != nil {
 		return err
@@ -381,6 +449,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 		// Always close the body when done
 		defer resp.Body.Close()
 
+		l.Printf("Delete %s HTTP response Status: %s", d.Id(), resp.Status)
 		if resp.StatusCode != http.StatusNoContent {
 			return fmt.Errorf("Delete VM %s Bad HTTP status from bigv: %d", d.Id(), resp.StatusCode)
 		}
@@ -390,12 +459,16 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error) {
+	l := log.New(os.Stderr, "", 0)
+
 	bigvClient := meta.(*client)
 
-	url := fmt.Sprintf("%s/virtual_machines/%s?view=simple",
-		bigvClient.fullUri(),
+	url := fmt.Sprintf("%s/virtual_machines/%s",
+		bigvUri,
 		d.Id(),
 	)
+
+	l.Printf("Checking VM existance at %s", url)
 
 	req, _ := http.NewRequest("GET", url, nil)
 	resp, err := bigvClient.do(req)
@@ -403,6 +476,7 @@ func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error
 		return false, err
 	}
 
+	l.Printf("Exists %s HTTP response Status: %s", d.Id(), resp.Status)
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
 		return true, nil
 	} else if resp.StatusCode == http.StatusNotFound {
@@ -429,6 +503,8 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	d.Set("memory", vm.Memory)
 	d.Set("power_on", vm.Power)
 	d.Set("reboot", vm.Reboot)
+	d.Set("group_id", vm.GroupId)
+	d.Set("zone", vm.Zone)
 
 	// If we don't get discs back, this was probably an update request
 	if len(vm.Discs) == 1 {

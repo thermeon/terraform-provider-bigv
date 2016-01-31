@@ -29,8 +29,14 @@ func Provider() terraform.ResourceProvider {
 			"group": &schema.Schema{
 				Type:        schema.TypeString,
 				Required:    true,
-				DefaultFunc: schema.EnvDefaultFunc("BIGV_GROUP", nil),
-				Description: "The bigv group name",
+				DefaultFunc: schema.EnvDefaultFunc("BIGV_GROUP", "default"),
+				Description: "The default bigv group name to use for vms, overriden by the resource",
+			},
+			"zone": &schema.Schema{
+				Type:        schema.TypeString,
+				Required:    true,
+				DefaultFunc: schema.EnvDefaultFunc("BIGV_ZONE", "york"),
+				Description: "The default bigv zone name to use for vms, overriden by the resource",
 			},
 		},
 		ResourcesMap: map[string]*schema.Resource{
@@ -47,6 +53,7 @@ func providerConfigure(d *schema.ResourceData) (bigvClient interface{}, err erro
 		user:     d.Get("user").(string),
 		password: d.Get("password").(string),
 		group:    d.Get("group").(string),
+		zone:     d.Get("zone").(string),
 	}
 
 	return

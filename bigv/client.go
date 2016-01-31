@@ -20,6 +20,7 @@ const bigvTimeout = 20
 type client struct {
 	account  string
 	group    string
+	zone     string
 	user     string
 	password string
 	http     *http.Client
@@ -31,14 +32,6 @@ var sessions sync.Mutex
 type credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-}
-
-func (c *client) fullUri() string {
-	return fmt.Sprintf("%s/accounts/%s/groups/%s",
-		bigvUri,
-		c.account,
-		c.group,
-	)
 }
 
 func (c *client) newSession() error {
@@ -113,7 +106,7 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 		resp, err := c.http.Do(req)
 
 		// Either a full error, or a good response
-		if err != nil || (resp.StatusCode >= 200 && resp.StatusCode < 300) {
+		if err != nil || (resp.StatusCode >= 200 && resp.StatusCode < 500) {
 			return resp, err
 		}
 
