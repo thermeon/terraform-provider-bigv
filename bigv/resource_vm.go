@@ -87,7 +87,7 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"group": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Default:     "default",
 				Description: "bigv group name for the VM. Defaults to default",
@@ -98,7 +98,7 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"zone": &schema.Schema{
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Default:     "york",
 				Description: "bigv zone to put the VM in. Defaults to york",
@@ -540,8 +540,3 @@ func randomPassword() string {
 	}
 	return string(b)
 }
-
-/* TODO:
- * Check distribution
- * Disc isn't flexible at all
- */
