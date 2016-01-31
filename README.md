@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/thermeon/terraform-provider-bigv.png?label=ready&title=Ready)](https://waffle.io/thermeon/terraform-provider-bigv)
 # Terraform-Profider-Bigv
 
 [BigV](http://bigv.io) is a private dedicated virtual machine platfom provided by Bytemark,
