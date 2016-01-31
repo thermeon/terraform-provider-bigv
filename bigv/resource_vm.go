@@ -3,7 +3,6 @@ package bigv
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -88,9 +87,10 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"group": &schema.Schema{
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
 				ForceNew:    true,
-				Description: "bigv group name for the VM. Defaults to the provider.group",
+				Default:     "default",
+				Description: "bigv group name for the VM. Defaults to default",
 			},
 			"group_id": &schema.Schema{
 				Type:     schema.TypeInt,
@@ -98,9 +98,10 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"zone": &schema.Schema{
 				Type:        schema.TypeString,
-				Optional:    true,
+				Required:    true,
 				ForceNew:    true,
-				Description: "bigv zone to put the VM in. Defaults to the provider.zone",
+				Default:     "york",
+				Description: "bigv zone to put the VM in. Defaults to york",
 			},
 			"ipv4": &schema.Schema{
 				Type:     schema.TypeString,
@@ -195,21 +196,6 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 	}
 
-	if vm.VirtualMachine.Group == "" {
-		if bigvClient.group == "" {
-			return errors.New("group must be specified on the resource or the provider")
-		} else {
-			vm.VirtualMachine.Group = bigvClient.group
-		}
-	}
-
-	if vm.VirtualMachine.Zone == "" {
-		if bigvClient.zone == "" {
-			return errors.New("zone must be specified on the resource or the provider")
-		} else {
-			vm.VirtualMachine.Zone = bigvClient.zone
-		}
-	}
 	if err := vm.VirtualMachine.validateCoresToMemory(); err != nil {
 		return err
 	}

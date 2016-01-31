@@ -19,8 +19,6 @@ const bigvTimeout = 20
 
 type client struct {
 	account  string
-	group    string
-	zone     string
 	user     string
 	password string
 	http     *http.Client

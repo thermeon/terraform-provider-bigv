@@ -21,18 +21,6 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 
    Bigv account name.
 
-* **group**
-
-   Default bigv group to for the VM if the resource doesn't specify
-
-   Defaults to default.
-
-* **zone**
-
-   Default bigv zone to put the server in if the resource doesn't specify. 
-   Currently this is machester or york. See [definitions](http://www.bigv.io/support/api/definitions/).
-
-   Defaults to york.
 
 * **user**
 
@@ -53,13 +41,13 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 
    The group name for the server.
 
-   Defaults to provider.group.
+   Defaults to default.
 
 * **zone**
 
    The zone to put the server in. Currently this is machester or york. See [definitions](http://www.bigv.io/support/api/definitions/).
 
-   Defaults to provider.zone
+   Defaults to york.
 
 * **cores**
 
@@ -128,12 +116,6 @@ variable "account" {
 variable "user" {
   default = "myuser"
 }
-variable "group" {
-  default = "default"
-}
-variable "zone" {
-  default = "york"
-}
 // Probably best to supply this interactively
 variable "password" { }
 ```
@@ -144,8 +126,6 @@ provider "bigv" {
   account  = "${var.account}"
   user     = "${var.user}"
   password = "${var.password}"
-  group    = "${var.group}"
-  zone     = "${var.zone}"
 }
 ```
 
@@ -158,6 +138,8 @@ resource "bigv_vm" "tf01" {
   cores   = 1
   memory  = 1024
   os      = "vivid"
+  group   = "default"
+  zone    = "manchester"
 }
  
 resource "bigv_vm" "tf02" {
@@ -167,6 +149,8 @@ resource "bigv_vm" "tf02" {
   cores   = 2
   memory  = 4096
   os      = "trusty"
+  group   = "vlan1519"
+  zone    = "york"
 }
  
 resource "bigv_vm" "tf03" {
