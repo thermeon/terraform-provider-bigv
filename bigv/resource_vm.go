@@ -12,14 +12,21 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/terraform/helper/schema"
+	"golang.org/x/crypto/ssh"
 )
 
-const passwordLength = 20
-const waitForVM = 120
+const (
+	passwordLength     = 20
+	waitForVM          = 300
+	vmCheckInterval    = 5
+	waitForProvisioned = 1 + iota
+	waitForPowered     = 1 + iota
+)
 
 type bigvVm struct {
 	Id           int    `json:"id,omitempty"`
@@ -169,14 +176,6 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 	l := log.New(os.Stderr, "", 0)
 
-	// TODO - Early 2016, and we hope to remove this soonish
-	// bigV deadlocks if you hit it with concurrent creates.
-	// That might be an ip allocation issue, and specifying both ips might
-	// fix it, but that's untested. For now waiting for them to confirm we
-	// can lift this restriction.
-	createPipeline.Lock()
-	defer createPipeline.Unlock()
-
 	bigvClient := meta.(*client)
 
 	vm := bigvVMCreate{
@@ -233,36 +232,64 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
-	if resp, err := bigvClient.do(req); err != nil {
+	// TODO - Early 2016, and we hope to remove this soonish
+	// bigV deadlocks if you hit it with concurrent creates.
+	// That might be an ip allocation issue, and specifying both ips might
+	// fix it, but that's untested. For now waiting for them to confirm we
+	// can lift this restriction.
+	createPipeline.Lock()
+	resp, err := bigvClient.do(req)
+	if err != nil {
 		return err
-	} else {
+	}
+	createPipeline.Unlock()
 
-		// Always close the body when done
-		defer resp.Body.Close()
+	// Always close the body when done
+	defer resp.Body.Close()
 
-		l.Printf("HTTP response Status: %s", resp.Status)
+	l.Printf("HTTP response Status: %s", resp.Status)
 
-		if resp.StatusCode != http.StatusAccepted {
-			body, _ := ioutil.ReadAll(resp.Body)
-			return fmt.Errorf("Create VM status %d from bigv: %s", resp.StatusCode, body)
-		}
+	if resp.StatusCode != http.StatusAccepted {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("Create VM status %d from bigv: %s", resp.StatusCode, body)
+	}
 
-		for k, v := range resp.Header {
-			l.Printf("%s: %s", k, v)
-		}
+	d.Partial(true)
+	for _, i := range []string{"name", "group_id", "group", "zone", "cores", "memory", "ipv4", "ipv6", "root_password"} {
+		d.SetPartial(i)
+	}
 
-		if err := waitForMachine(d, bigvClient); err != nil {
+	for k, v := range resp.Header {
+		l.Printf("%s: %s", k, v)
+	}
+
+	if err := waitForBigvState(d, bigvClient, waitForProvisioned); err != nil {
+		return err
+	}
+
+	l.Printf("Created BigV VM, Id: %s", d.Id())
+
+	// If we expect it to be turned on, wait for it to powered
+	if vm.VirtualMachine.Power == true {
+		if err := waitForBigvState(d, bigvClient, waitForPowered); err != nil {
 			return err
 		}
 
-		l.Printf("Created BigV VM, Id: %s", d.Id())
-
-		return nil
+		// This assumes all distributions will listen on public ssh
+		if vm.Image.Distribution != "none" {
+			if err := waitForVmSsh(d); err != nil {
+				return err
+			}
+		}
 	}
+
+	d.Partial(false)
+
+	return nil
 
 }
 
-func waitForMachine(d *schema.ResourceData, bigvClient *client) error {
+func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) error {
 	l := log.New(os.Stderr, "", 0)
 
 	url := fmt.Sprintf("%s/virtual_machines/%s?view=overview",
@@ -273,39 +300,84 @@ func waitForMachine(d *schema.ResourceData, bigvClient *client) error {
 	l.Printf("VM Health Check: %s", url)
 	req, _ := http.NewRequest("GET", url, nil)
 
-	for i := 0; i < waitForVM; i++ {
-		resp, err := bigvClient.do(req)
-		if err != nil {
-			return fmt.Errorf("Error checking on VM health: %s", err)
+	var body []byte
+	for {
+		select {
+		case <-time.After(waitForVM * time.Second):
+			return fmt.Errorf("VM state didn't happen in %d seconds", waitForVM)
+		case <-time.Tick(vmCheckInterval * time.Second):
+			resp, err := bigvClient.do(req)
+			if err != nil {
+				return fmt.Errorf("Error checking on VM health: %s", err)
+			}
+
+			// Always close the body when done
+			defer resp.Body.Close()
+
+			body, _ = ioutil.ReadAll(resp.Body)
+
+			l.Printf("HTTP response Status: %s", resp.Status)
+			// No matter what, update everything comes from the state
+			if err := resourceFromJson(d, body); err != nil {
+				return err
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				if waitFor == waitForProvisioned {
+					l.Println("VM is Up and HTTP OK")
+					return nil
+				}
+
+				l.Println("VM power:", d.Get("power_on").(bool))
+				switch {
+				case waitFor == waitForPowered && d.Get("power_on").(bool):
+					l.Println("VM is powered")
+					return nil
+				}
+			}
+
+			if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("VM healthcheck Bad HTTP status from bigv: %d", resp.StatusCode)
+			}
 		}
-
-		// Always close the body when done
-		defer resp.Body.Close()
-
-		body, _ := ioutil.ReadAll(resp.Body)
-
-		l.Printf("HTTP response Status: %s", resp.Status)
-		l.Printf("HTTP response Body: %s", body)
-
-		if i == 0 {
-			// Use the first response to populate the body of our resource, in case we never do any better
-			resourceFromJson(d, body)
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			// The VM is up
-			l.Println("VM is Up and OK")
-			return resourceFromJson(d, body)
-		}
-
-		if resp.StatusCode != http.StatusAccepted {
-			return fmt.Errorf("VM healthcheck Bad HTTP status from bigv: %d", resp.StatusCode)
-		}
-
-		time.Sleep(1 * time.Second)
 	}
 
-	return fmt.Errorf("VM healthcheck didn't return in %d seconds", waitForVM)
+	return fmt.Errorf("VM state didn't happen in %d seconds", waitForVM)
+}
+
+// Simply waits for ssh to come up
+func waitForVmSsh(d *schema.ResourceData) error {
+	l := log.New(os.Stderr, "", 0)
+
+	l.Printf("Waiting for VM ssh: %s", d.Get("name"))
+
+	config := &ssh.ClientConfig{
+		User: "root",
+		Auth: []ssh.AuthMethod{
+			ssh.Password(d.Get("root_password").(string)),
+		},
+	}
+
+	for {
+		select {
+		case <-time.After(waitForVM * time.Second):
+			return fmt.Errorf("VM ssh wasn't up in %d seconds", waitForVM)
+		case <-time.Tick(vmCheckInterval * time.Second):
+			conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", d.Get("ipv4")), config)
+			if err != nil {
+				if strings.Contains(err.Error(), "connection refused") {
+					l.Println("SSH isn't up yet")
+					continue
+				}
+				return err
+			}
+			conn.Close()
+			l.Println("SSH alive and kicking")
+			return nil
+		}
+	}
+
+	return errors.New("Ssh wait should never get here")
 }
 
 func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {

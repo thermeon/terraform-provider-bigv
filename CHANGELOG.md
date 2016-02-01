@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
+### Changed
+- Synchronous creation now only applies to the initial request to vm_create, which should increase parellism
+### Added
+- Creation now waits for the VM to be imaged fully
+- Partial state is now supported for creation
 ### Fixed
 - Root password being lost after vm create
 
