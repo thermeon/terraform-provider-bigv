@@ -205,6 +205,9 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 	}
 
+	// Make sure the root password gets stored in d
+	d.Set("root_password", vm.Image.RootPassword)
+
 	if err := vm.VirtualMachine.computeCoresToMemory(); err != nil {
 		return err
 	}
@@ -228,6 +231,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
 
+	l.Printf("RootPassword; %s", d.Get("root_password"))
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
 	if resp, err := bigvClient.do(req); err != nil {
@@ -248,6 +252,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			l.Printf("%s: %s", k, v)
 		}
 
+		l.Printf("RootPassword 2; %s", d.Get("root_password"))
 		if err := waitForMachine(d, bigvClient); err != nil {
 			return err
 		}
@@ -488,6 +493,7 @@ func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error
 func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	l := log.New(os.Stderr, "", 0)
 
+	l.Printf("RootPassword 3; %s", d.Get("root_password"))
 	l.Printf("VM definition: %s", vmJson)
 
 	vm := &bigvServer{}
