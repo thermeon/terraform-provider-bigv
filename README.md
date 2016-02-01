@@ -7,6 +7,14 @@ This terraform provider allows the management of machines on that platform.
 See [BigV prices](http://www.bigv.io/prices), [Resource definitions](http://www.bigv.io/support/api/definitions/) and 
 [API documentation](http://www.bigv.io/support/api/virtual_machines/) for configuration options to resource parameters.
 
+## Imaging and status of created
+
+If the os you provide is not none, then terraform will wait for the imaging to finish before reporting completion.
+That should be one in under 3 minutes depending on your distribution.
+Your distribution must expose an ssh daemon on port 22, since that's how we define "alive".
+
+If your os is none, then we either wait for the VM to be processed by bigv if power_on is false,
+or we wait for it to be powered up if power_on is true.
 
 ## Resource changes and reboots
 
@@ -20,7 +28,6 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 * **account**
 
    Bigv account name.
-
 
 * **user**
 
