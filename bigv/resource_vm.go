@@ -22,7 +22,7 @@ import (
 
 const (
 	passwordLength     = 20
-	waitForVM          = 300
+	waitForVM          = 600
 	vmCheckInterval    = 5
 	waitForProvisioned = 1 + iota
 	waitForPowered     = 1 + iota
@@ -368,8 +368,10 @@ func waitForVmSsh(d *schema.ResourceData) error {
 				if strings.Contains(err.Error(), "connection refused") {
 					l.Println("SSH isn't up yet")
 					continue
+				} else {
+					l.Printf("SSH Error, ignored: %s", err.Error())
+					continue
 				}
-				return err
 			}
 			conn.Close()
 			l.Println("SSH alive and kicking")
