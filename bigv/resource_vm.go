@@ -22,7 +22,7 @@ import (
 
 const (
 	passwordLength     = 20
-	waitForVM          = 300
+	waitForVM          = 1200
 	vmCheckInterval    = 5
 	waitForProvisioned = 1 + iota
 	waitForPowered     = 1 + iota
@@ -49,9 +49,10 @@ type bigvDisc struct {
 }
 
 type bigvImage struct {
-	Distribution string `json:"distribution,omitempty"`
-	RootPassword string `json:"root_password,omitempty"`
-	SshPublicKey string `json:"ssh_public_key,omitempty"`
+	Distribution    string `json:"distribution,omitempty"`
+	RootPassword    string `json:"root_password,omitempty"`
+	SshPublicKey    string `json:"ssh_public_key,omitempty"`
+	FirstBootScript string `json:"firstboot_script,omitempty"`
 }
 
 type bigvIps struct {
@@ -166,6 +167,11 @@ func resourceBigvVM() *schema.Resource {
 				Optional:    true,
 				Description: "One or more ssh public keys to put on the machine. Will only work if os is not core",
 			},
+			"firstboot_script": &schema.Schema{
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "A script to be executed on first boot arbitrarily",
+			},
 		},
 	}
 }
@@ -194,9 +200,10 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			Size:         d.Get("disc_size").(int),
 		}},
 		Image: bigvImage{
-			Distribution: d.Get("os").(string),
-			RootPassword: randomPassword(),
-			SshPublicKey: d.Get("ssh_public_key").(string),
+			Distribution:    d.Get("os").(string),
+			RootPassword:    randomPassword(),
+			SshPublicKey:    d.Get("ssh_public_key").(string),
+			FirstBootScript: d.Get("firstboot_script").(string),
 		},
 		Ips: bigvIps{
 			Ipv4: d.Get("ipv4").(string),
@@ -368,8 +375,10 @@ func waitForVmSsh(d *schema.ResourceData) error {
 				if strings.Contains(err.Error(), "connection refused") {
 					l.Println("SSH isn't up yet")
 					continue
+				} else {
+					l.Printf("SSH Error, ignored: %s", err.Error())
+					continue
 				}
-				return err
 			}
 			conn.Close()
 			l.Println("SSH alive and kicking")

@@ -114,6 +114,11 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 
    SSH public key to be created on the VM. Can be multiple keys.
 
+* **firstboot_script**
+
+   A script to be run on first boot only by the bigv system itself.
+   Useful for provisioning, especially if terraform remote-exec or file provisioners don't work.
+
 ## Computed values
 
 * **root_password**
