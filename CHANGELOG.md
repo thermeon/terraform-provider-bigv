@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
+### Added
+- firstboot_script attribute for bootstrapping
 ### Changed
 - Increasse VM provisioning timeout to 20 minutes to allow for firstboot scripts
 - Ignore most ssh errors, but log them. Often we get errors as ssh comes up for the first time
