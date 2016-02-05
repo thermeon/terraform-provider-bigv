@@ -214,6 +214,13 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	// Make sure the root password gets stored in d
 	d.Set("root_password", vm.Image.RootPassword)
 
+	// Connection information
+	d.SetConnInfo(map[string]string{
+		"type":     "ssh",
+		"host":     vm.Ips.Ipv4,
+		"password": vm.Image.RootPassword,
+	})
+
 	if err := vm.VirtualMachine.computeCoresToMemory(); err != nil {
 		return err
 	}
@@ -270,6 +277,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		l.Printf("%s: %s", k, v)
 	}
 
+	// wait for state also sets up the resource from the read state we get back
 	if err := waitForBigvState(d, bigvClient, waitForProvisioned); err != nil {
 		return err
 	}
@@ -296,6 +304,9 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 
 }
 
+// waitForBigvState
+// Obviously wait for a state
+// Also sets up the resource from the state read
 func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) error {
 	l := log.New(os.Stderr, "", 0)
 
@@ -604,6 +615,12 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 		// This is fairly^Wvery^Wacceptably hacky
 		d.Set("ipv4", vm.Nics[0].Ips[0])
 		d.Set("ipv6", vm.Nics[1].Ips[1])
+
+		d.SetConnInfo(map[string]string{
+			"type":     "ssh",
+			"host":     vm.Nics[0].Ips[0],
+			"password": d.Get("root_password").(string),
+		})
 	}
 
 	return nil
