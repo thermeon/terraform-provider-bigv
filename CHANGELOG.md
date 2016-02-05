@@ -4,6 +4,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
 
+## [1.2.1] - 2016-02-05
+### Fixed
+- Fix provider not setting connection info for provisioners.
+
 ## [1.2.0] - 2016-02-03
 ### Added
 - firstboot_script attribute for bootstrapping
