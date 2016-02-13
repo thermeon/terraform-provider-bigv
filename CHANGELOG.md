@@ -4,6 +4,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
 
+## [1.3.1] - 2016-02-13
+### Fixed
+- Fix fresh session id never being used
+
 ## [1.3.0] - 2016-02-13
 ### Changed
 - Remove all non-alphanumetic password characters, and increase password size to compensate

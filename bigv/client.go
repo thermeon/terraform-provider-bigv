@@ -87,8 +87,6 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.session))
-	l.Printf("Using Session Id: %s", c.session)
 
 	// We're going to potentially do this again, so we need to copy the body
 	var body []byte
@@ -100,6 +98,10 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 		if len(body) > 0 {
 			req.Body = ioutil.NopCloser(bytes.NewReader(body))
 		}
+
+		// Set inside for loop because we regenerate it if we 401
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.session))
+		l.Printf("Using Session Id: %s", c.session)
 
 		resp, err := c.http.Do(req)
 
