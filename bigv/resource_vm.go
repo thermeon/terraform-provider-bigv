@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	passwordLength     = 20
+	passwordLength     = 48
 	waitForVM          = 1200
 	vmCheckInterval    = 5
 	waitForProvisioned = 1 + iota
@@ -654,7 +654,7 @@ func (v *bigvVm) computeCoresToMemory() error {
 	return nil
 }
 
-const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@%&-_=+:~"
+const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
 func randomPassword() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
