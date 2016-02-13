@@ -103,15 +103,18 @@ func (c *client) do(req *http.Request) (*http.Response, error) {
 
 		resp, err := c.http.Do(req)
 
-		// Either a full error, or a good response
-		if err != nil || (resp.StatusCode >= 200 && resp.StatusCode < 500) {
+		if err != nil {
+			return resp, err
+		}
+
+		// A good response
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return resp, err
 		}
 
 		// Otherwise we need to massage and deal with auth retries
 
 		if resp.StatusCode == 401 && i == 0 {
-			return resp, err
 			l.Printf("HTTP 401. Retrying with a new session id")
 			time.Sleep(1 * time.Second)
 			c.newSession()
