@@ -253,10 +253,10 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	// can lift this restriction.
 	createPipeline.Lock()
 	resp, err := bigvClient.do(req)
+	createPipeline.Unlock()
 	if err != nil {
 		return err
 	}
-	createPipeline.Unlock()
 
 	// Always close the body when done
 	defer resp.Body.Close()
