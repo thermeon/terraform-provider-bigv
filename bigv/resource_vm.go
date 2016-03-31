@@ -258,7 +258,6 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
 
-	return errors.New(string(body))
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
 	// TODO - Early 2016, and we hope to remove this soonish
