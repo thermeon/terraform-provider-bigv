@@ -71,14 +71,14 @@ type bigvNic struct {
 type bigvServer struct {
 	bigvVm
 	Discs []bigvDisc `json:"discs,omitempty"`
-	Nics  []bigvNic  `json:"network_interface,omitempty"`
+	Nics  []bigvNic  `json:"network_interfaces,omitempty"`
 }
 
 type bigvVMCreate struct {
 	VirtualMachine bigvVm     `json:"virtual_machine"`
 	Discs          []bigvDisc `json:"discs,omitempty"`
 	Image          bigvImage  `json:"reimage,omitempty"`
-	Ips            bigvIps    `json:"ips,omitempty"` // Just used for create
+	Ips            *bigvIps   `json:"ips,omitempty"` // Just used for create
 }
 
 func resourceBigvVM() *schema.Resource {
@@ -114,13 +114,13 @@ func resourceBigvVM() *schema.Resource {
 			},
 			"ipv4": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Optional: true,
+				Computed: true,
 			},
 			"ipv6": &schema.Schema{
 				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
+				Optional: true,
+				Computed: true,
 			},
 			"os": &schema.Schema{
 				Type:     schema.TypeString,
@@ -205,21 +205,35 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 			SshPublicKey:    d.Get("ssh_public_key").(string),
 			FirstBootScript: d.Get("firstboot_script").(string),
 		},
-		Ips: bigvIps{
-			Ipv4: d.Get("ipv4").(string),
-			Ipv6: d.Get("ipv6").(string),
-		},
+	}
+
+	// If no ipv* is set then let bigv allocate it itself
+	// The json for ip must be nil
+	if ip := d.Get("ipv4"); ip != nil && ip.(string) != "" {
+		vm.Ips = &bigvIps{
+			Ipv4: ip.(string),
+		}
+	}
+
+	if ip := d.Get("ipv6"); ip != nil && ip.(string) != "" {
+		if vm.Ips == nil {
+			vm.Ips = &bigvIps{}
+		}
+		vm.Ips.Ipv6 = ip.(string)
 	}
 
 	// Make sure the root password gets stored in d
 	d.Set("root_password", vm.Image.RootPassword)
 
 	// Connection information
-	d.SetConnInfo(map[string]string{
+	connInfo := map[string]string{
 		"type":     "ssh",
-		"host":     vm.Ips.Ipv4,
 		"password": vm.Image.RootPassword,
-	})
+	}
+	if vm.Ips != nil {
+		connInfo["host"] = vm.Ips.Ipv4
+	}
+	d.SetConnInfo(connInfo)
 
 	if err := vm.VirtualMachine.computeCoresToMemory(); err != nil {
 		return err
@@ -244,6 +258,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	l.Printf("Requesting VM create: %s", url)
 	l.Printf("VM profile: %s", body)
 
+	return errors.New(string(body))
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
 	// TODO - Early 2016, and we hope to remove this soonish
