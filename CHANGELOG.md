@@ -4,6 +4,12 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
 
+## [1.4.0] - 2016-03-31
+### Added
+- Allow dynamic ips from bigv
+### Fixed
+- Fix crash on ipv6 being set from bigv
+
 ## [1.3.2] - 2016-02-20
 ### Fixed
 - Fix blocking when a vm create fails

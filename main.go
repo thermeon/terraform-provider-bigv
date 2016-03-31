@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/Thermeon/terraform-provider-bigv/bigv"
 	"github.com/hashicorp/terraform/plugin"
+	"github.com/thermeon/terraform-provider-bigv/bigv"
 )
 
 func main() {

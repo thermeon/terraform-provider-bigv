@@ -86,7 +86,7 @@ e.g. decreasing to 1GiB gives you 750MiB until you restart.
 * **ipv6**
 
    IP address to allocate.
-   We force ipv6 to be specified because it eases the burden on bytemark's allocation process,
+   We recommend ips should be specified because it eases the burden on bytemark's allocation process,
    and should allow concurrent imaging without deadlocks.
 
 * **disc_size**
