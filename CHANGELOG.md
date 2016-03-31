@@ -4,6 +4,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [UNRELEASED] - 0000-00-00
 
+## [1.4.1] - 2016-03-31
+### Fixed
+- Fix vm create always erroring and never creating anything
+
 ## [1.4.0] - 2016-03-31
 ### Added
 - Allow dynamic ips from bigv
