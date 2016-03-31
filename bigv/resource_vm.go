@@ -614,7 +614,7 @@ func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
 	if len(vm.Nics) > 0 {
 		// This is fairly^Wvery^Wacceptably hacky
 		d.Set("ipv4", vm.Nics[0].Ips[0])
-		d.Set("ipv6", vm.Nics[1].Ips[1])
+		d.Set("ipv6", vm.Nics[0].Ips[1])
 
 		d.SetConnInfo(map[string]string{
 			"type":     "ssh",
