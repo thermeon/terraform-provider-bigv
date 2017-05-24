@@ -146,6 +146,12 @@ func resourceBigvVM() *schema.Resource {
 				Default:  "25600",
 				ForceNew: true,
 			},
+			"storage_grade": &schema.Schema{
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "sata",
+				ForceNew: true,
+			},
 			"root_password": &schema.Schema{
 				Type:     schema.TypeString,
 				Computed: true,
@@ -196,7 +202,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		},
 		Discs: []bigvDisc{{
 			Label:        "root",
-			StorageGrade: "sata",
+			StorageGrade: d.Get("storage_grade").(string),
 			Size:         d.Get("disc_size").(int),
 		}},
 		Image: bigvImage{
