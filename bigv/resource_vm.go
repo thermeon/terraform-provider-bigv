@@ -380,6 +380,7 @@ func waitForVmSsh(d *schema.ResourceData) error {
 		Auth: []ssh.AuthMethod{
 			ssh.Password(d.Get("root_password").(string)),
 		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
 	for {
