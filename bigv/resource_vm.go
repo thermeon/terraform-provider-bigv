@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -179,9 +178,6 @@ func resourceBigvVM() *schema.Resource {
 var createPipeline sync.Mutex
 
 func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
-
-	l := log.New(os.Stderr, "", 0)
-
 	bigvClient := meta.(*client)
 
 	vm := bigvVMCreate{
@@ -255,8 +251,8 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		vm.VirtualMachine.Group, // this will be group name
 	)
 
-	l.Printf("Requesting VM create: %s", url)
-	l.Printf("VM profile: %s", body)
+	log.Printf("[DEBUG] Requesting VM create: %s", url)
+	log.Printf("[DEBUG] VM profile: %s", body)
 
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
@@ -275,7 +271,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	// Always close the body when done
 	defer resp.Body.Close()
 
-	l.Printf("HTTP response Status: %s", resp.Status)
+	log.Printf("[DEBUG] HTTP response Status: %s", resp.Status)
 
 	if resp.StatusCode != http.StatusAccepted {
 		body, _ := ioutil.ReadAll(resp.Body)
@@ -288,7 +284,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 	}
 
 	for k, v := range resp.Header {
-		l.Printf("%s: %s", k, v)
+		log.Printf("[DEBUG] %s: %s", k, v)
 	}
 
 	// wait for state also sets up the resource from the read state we get back
@@ -296,7 +292,7 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 		return err
 	}
 
-	l.Printf("Created BigV VM, Id: %s", d.Id())
+	log.Printf("[DEBUG] Created BigV VM, Id: %s", d.Id())
 
 	// If we expect it to be turned on, wait for it to powered
 	if vm.VirtualMachine.Power == true {
@@ -322,14 +318,12 @@ func resourceBigvVMCreate(d *schema.ResourceData, meta interface{}) error {
 // Obviously wait for a state
 // Also sets up the resource from the state read
 func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) error {
-	l := log.New(os.Stderr, "", 0)
-
 	url := fmt.Sprintf("%s/virtual_machines/%s?view=overview",
 		bigvUri,
 		d.Get("name"),
 	)
 
-	l.Printf("VM Health Check: %s", url)
+	log.Printf("[DEBUG] VM Health Check: %s", url)
 	req, _ := http.NewRequest("GET", url, nil)
 
 	var body []byte
@@ -348,7 +342,7 @@ func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) e
 
 			body, _ = ioutil.ReadAll(resp.Body)
 
-			l.Printf("HTTP response Status: %s", resp.Status)
+			log.Printf("[DEBUG] HTTP response Status: %s", resp.Status)
 			// No matter what, update everything comes from the state
 			if err := resourceFromJson(d, body); err != nil {
 				return err
@@ -356,14 +350,14 @@ func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) e
 
 			if resp.StatusCode == http.StatusOK {
 				if waitFor == waitForProvisioned {
-					l.Println("VM is Up and HTTP OK")
+					log.Println("[DEBUG] VM is Up and HTTP OK")
 					return nil
 				}
 
-				l.Println("VM power:", d.Get("power_on").(bool))
+				log.Println("[DEBUG] VM power:", d.Get("power_on").(bool))
 				switch {
 				case waitFor == waitForPowered && d.Get("power_on").(bool):
-					l.Println("VM is powered")
+					log.Println("[DEBUG] VM is powered")
 					return nil
 				}
 			}
@@ -379,9 +373,7 @@ func waitForBigvState(d *schema.ResourceData, bigvClient *client, waitFor int) e
 
 // Simply waits for ssh to come up
 func waitForVmSsh(d *schema.ResourceData) error {
-	l := log.New(os.Stderr, "", 0)
-
-	l.Printf("Waiting for VM ssh: %s", d.Get("name"))
+	log.Printf("[DEBUG] Waiting for VM ssh: %s", d.Get("name"))
 
 	config := &ssh.ClientConfig{
 		User: "root",
@@ -398,15 +390,15 @@ func waitForVmSsh(d *schema.ResourceData) error {
 			conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", d.Get("ipv4")), config)
 			if err != nil {
 				if strings.Contains(err.Error(), "connection refused") {
-					l.Println("SSH isn't up yet")
+					log.Println("[DEBUG] SSH isn't up yet")
 					continue
 				} else {
-					l.Printf("SSH Error, ignored: %s", err.Error())
+					log.Printf("[DEBUG] SSH Error, ignored: %s", err.Error())
 					continue
 				}
 			}
 			conn.Close()
-			l.Println("SSH alive and kicking")
+			log.Println("[DEBUG] SSH alive and kicking")
 			return nil
 		}
 	}
@@ -415,8 +407,6 @@ func waitForVmSsh(d *schema.ResourceData) error {
 }
 
 func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
-	l := log.New(os.Stderr, "", 0)
-
 	bigvClient := meta.(*client)
 
 	vm := bigvVm{}
@@ -461,12 +451,12 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		d.Id(),
 	)
 
-	l.Printf("Requesting VM update: %s", url)
-	l.Printf("VM profile: %s", body)
+	log.Printf("[DEBUG] Requesting VM update: %s", url)
+	log.Printf("[DEBUG] VM profile: %s", body)
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
 	if err != nil {
-		l.Printf("Error creating request for Update: %s", err)
+		log.Printf("[DEBUG] Error creating request for Update: %s", err)
 		return err
 	}
 
@@ -477,7 +467,7 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 		// Always close the body when done
 		defer resp.Body.Close()
 
-		l.Printf("HTTP response Status: %s", resp.Status)
+		log.Printf("[DEBUG] HTTP response Status: %s", resp.Status)
 
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("Update VM bad status from bigv: %d", resp.StatusCode)
@@ -491,7 +481,7 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 			}
 		}
 
-		l.Printf("Updated BigV VM, Id: %s", d.Id())
+		log.Printf("[DEBUG] Updated BigV VM, Id: %s", d.Id())
 
 		return nil
 	}
@@ -499,8 +489,6 @@ func resourceBigvVMUpdate(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
-	l := log.New(os.Stderr, "", 0)
-
 	bigvClient := meta.(*client)
 
 	url := fmt.Sprintf("%s/virtual_machines/%s?view=overview",
@@ -508,7 +496,7 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 		d.Get("name"),
 	)
 
-	l.Printf("VM Read: %s", url)
+	log.Printf("[DEBUG] VM Read: %s", url)
 
 	req, _ := http.NewRequest("GET", url, nil)
 
@@ -520,7 +508,7 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 	// Always close the body when done
 	defer resp.Body.Close()
 
-	l.Printf("HTTP response Status: %s", resp.Status)
+	log.Printf("[DEBUG] HTTP response Status: %s", resp.Status)
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Read VM Bad HTTP status from bigv: %d", resp.StatusCode)
@@ -535,8 +523,6 @@ func resourceBigvVMRead(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
-	l := log.New(os.Stderr, "", 0)
-
 	bigvClient := meta.(*client)
 
 	url := fmt.Sprintf("%s/accounts/%s/groups/%s/virtual_machines/%s?purge=true",
@@ -545,7 +531,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 		d.Get("group"),
 		d.Id(),
 	)
-	l.Printf("Deleting VM at %s", url)
+	log.Printf("[DEBUG] Deleting VM at %s", url)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return err
@@ -557,7 +543,7 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 		// Always close the body when done
 		defer resp.Body.Close()
 
-		l.Printf("Delete %s HTTP response Status: %s", d.Id(), resp.Status)
+		log.Printf("[DEBUG] Delete %s HTTP response Status: %s", d.Id(), resp.Status)
 		if resp.StatusCode != http.StatusNoContent {
 			return fmt.Errorf("Delete VM %s Bad HTTP status from bigv: %d", d.Id(), resp.StatusCode)
 		}
@@ -567,8 +553,6 @@ func resourceBigvVMDelete(d *schema.ResourceData, meta interface{}) error {
 }
 
 func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error) {
-	l := log.New(os.Stderr, "", 0)
-
 	bigvClient := meta.(*client)
 
 	url := fmt.Sprintf("%s/virtual_machines/%s",
@@ -576,7 +560,7 @@ func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error
 		d.Id(),
 	)
 
-	l.Printf("Checking VM existance at %s", url)
+	log.Printf("[DEBUG] Checking VM existance at %s", url)
 
 	req, _ := http.NewRequest("GET", url, nil)
 	resp, err := bigvClient.do(req)
@@ -584,7 +568,7 @@ func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error
 		return false, err
 	}
 
-	l.Printf("Exists %s HTTP response Status: %s", d.Id(), resp.Status)
+	log.Printf("[DEBUG] Exists %s HTTP response Status: %s", d.Id(), resp.Status)
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted {
 		return true, nil
 	} else if resp.StatusCode == http.StatusNotFound {
@@ -595,9 +579,7 @@ func resourceBigvVMExists(d *schema.ResourceData, meta interface{}) (bool, error
 }
 
 func resourceFromJson(d *schema.ResourceData, vmJson []byte) error {
-	l := log.New(os.Stderr, "", 0)
-
-	l.Printf("VM definition: %s", vmJson)
+	log.Printf("[DEBUG] VM definition: %s", vmJson)
 
 	vm := &bigvServer{}
 
